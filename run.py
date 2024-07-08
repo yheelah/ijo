@@ -20,19 +20,19 @@ async def check_proxy(proxy_url):
                     elapsed_time = time.time() - start_time
                     return elapsed_time * 1000  # Convert to milliseconds
                 else:
-                    return float('inf')  # Indicate proxy is not working properly
+                    return None  # Indicate proxy is not working properly
     except Exception as e:
         logger.error(f"Error checking proxy {proxy_url}: {str(e)}")
-        return float('inf')  # Indicate proxy is not working properly
+        return None  # Indicate proxy is not working properly
 
 async def connect_to_wss(socks5_proxy, user_id):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
     
-    # Check proxy ping or score here
+    # Check proxy validity
     ping = await check_proxy(socks5_proxy)
-    if ping == float('inf') or ping > 100:
-        logger.info(f"Skipping {socks5_proxy} due to high ping or score is 0%")
+    if ping is None:
+        logger.info(f"Skipping {socks5_proxy} due to inability to connect or high ping")
         return
     
     while True:
@@ -100,14 +100,21 @@ async def connect_to_wss(socks5_proxy, user_id):
             continue
 
 async def main():
-    #find user_id on the site in conlose localStorage.getItem('userId') (if you can't get it, write allow pasting)
     _user_id = input('Please Enter your user ID: ')
     with open('proxy.txt', 'r') as file:
-            local_proxies = file.read().splitlines()
-    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in local_proxies ]
+        local_proxies = file.read().splitlines()
+    
+    # Filter proxies based on connectivity and ping
+    valid_proxies = []
+    for proxy in local_proxies:
+        ping = await check_proxy(proxy)
+        if ping is not None:
+            valid_proxies.append(proxy)
+        else:
+            logger.info(f"Proxy {proxy} is not valid and will be skipped.")
+    
+    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id)) for proxy in valid_proxies]
     await asyncio.gather(*tasks)
 
-
 if __name__ == '__main__':
-    #letsgo
     asyncio.run(main())
