@@ -27,7 +27,7 @@ async def connect_to_wss(socks5_proxy, user_id, success_proxies, retry_tasks):
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         
-        url = "wss://proxy.wynd.network:4650"
+        uri = "wss://proxy.wynd.network:4650"
         server_hostname = "proxy.wynd.network"
         proxy = Proxy.from_url(socks5_proxy)
         
