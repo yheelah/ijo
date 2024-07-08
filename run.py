@@ -1,22 +1,39 @@
-
 import asyncio
-import random
 import ssl
 import json
 import time
 import uuid
-import requests
-import shutil
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
+import aiohttp
 
 user_agent = UserAgent()
 random_user_agent = user_agent.random
 
+async def check_proxy(proxy_url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            start_time = time.time()
+            async with session.get("https://example.com", proxy=proxy_url, timeout=10) as response:
+                if response.status == 200:
+                    elapsed_time = time.time() - start_time
+                    return elapsed_time * 1000  # Convert to milliseconds
+                else:
+                    return float('inf')  # Indicate proxy is not working properly
+    except Exception as e:
+        logger.error(f"Error checking proxy {proxy_url}: {str(e)}")
+        return float('inf')  # Indicate proxy is not working properly
+
 async def connect_to_wss(socks5_proxy, user_id):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
+    
+    # Check proxy ping or score here
+    ping = await check_proxy(socks5_proxy)
+    if ping == float('inf') or ping > 100:
+        logger.info(f"Skipping {socks5_proxy} due to high ping or score is 0%")
+        return
     
     while True:
         try:
