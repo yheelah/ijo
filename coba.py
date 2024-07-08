@@ -12,19 +12,6 @@ from loguru import logger
 user_agent = UserAgent()
 random_user_agent = user_agent.random
 
-async def test_proxy_connection(proxy):
-    try:
-        # Example implementation for testing connection
-        async with aiohttp.ClientSession() as session:
-            async with session.get('https://www.example.com', proxy=proxy, timeout=10) as response:
-                if response.status == 200:
-                    return True
-                else:
-                    return False
-    except Exception as e:
-        logger.error(f"Error testing proxy {proxy}: {str(e)}")
-        return False
-
 async def connect_to_wss(socks5_proxy, user_id, success_proxies):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
@@ -104,12 +91,13 @@ async def connect_to_socks4(proxy, user_id, success_proxies):
         # Example implementation (using aiohttp for SOCKS4 support)
         connector = aiohttp_socks.SocksConnector.from_url(f'socks4://{proxy_address}')
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get('https://www.example.com', timeout=10) as response:
-                if response.status == 200:
-                    success_proxies.append(proxy)
-                    logger.info(f"Successfully connected to SOCKS4 proxy: {proxy}")
-                else:
-                    logger.error(f"Failed to connect to SOCKS4 proxy: {proxy}")
+            async with session.ws_connect('wss://proxy.example.com') as ws:
+                await ws.send_str('Hello, websocket!')
+                async for msg in ws:
+                    print(msg.data)
+        
+        success_proxies.append(proxy)
+        logger.info(f"Successfully connected to SOCKS4 proxy: {proxy}")
     
     except Exception as e:
         logger.error(f"Error in SOCKS4 connection to {proxy}: {str(e)}")
@@ -119,12 +107,13 @@ async def connect_to_http(proxy, user_id, success_proxies):
         # Example implementation (using aiohttp for HTTP/HTTPS proxy)
         connector = aiohttp.ProxyConnector.from_url(proxy)
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get('https://www.example.com', timeout=10) as response:
-                if response.status == 200:
-                    success_proxies.append(proxy)
-                    logger.info(f"Successfully connected to HTTP/HTTPS proxy: {proxy}")
-                else:
-                    logger.error(f"Failed to connect to HTTP/HTTPS proxy: {proxy}")
+            async with session.ws_connect('wss://proxy.example.com') as ws:
+                await ws.send_str('Hello, websocket!')
+                async for msg in ws:
+                    print(msg.data)
+        
+        success_proxies.append(proxy)
+        logger.info(f"Successfully connected to HTTP/HTTPS proxy: {proxy}")
     
     except Exception as e:
         logger.error(f"Error in HTTP/HTTPS connection to {proxy}: {str(e)}")
@@ -138,17 +127,12 @@ async def main():
     tasks = []
     
     for proxy in local_proxies:
-        if proxy.startswith('socks5://') or proxy.startswith('socks4://') or proxy.startswith('http://') or proxy.startswith('https://'):
-            # Test connection first before adding to tasks
-            if await test_proxy_connection(proxy):
-                if proxy.startswith('socks5://'):
-                    tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)))
-                elif proxy.startswith('socks4://'):
-                    tasks.append(asyncio.ensure_future(connect_to_socks4(proxy, _user_id, success_proxies)))
-                elif proxy.startswith('http://') or proxy.startswith('https://'):
-                    tasks.append(asyncio.ensure_future(connect_to_http(proxy, _user_id, success_proxies)))
-            else:
-                logger.warning(f"Proxy {proxy} is not responding. Skipping.")
+        if proxy.startswith('socks5://'):
+            tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)))
+        elif proxy.startswith('socks4://'):
+            tasks.append(asyncio.ensure_future(connect_to_socks4(proxy, _user_id, success_proxies)))
+        elif proxy.startswith('http://') or proxy.startswith('https://'):
+            tasks.append(asyncio.ensure_future(connect_to_http(proxy, _user_id, success_proxies)))
         else:
             logger.warning(f"Unknown proxy type for {proxy}. Skipping.")
     
