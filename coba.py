@@ -4,10 +4,8 @@ import ssl
 import json
 import time
 import uuid
-import requests
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-
 from loguru import logger
 
 user_agent = UserAgent()
@@ -31,58 +29,65 @@ async def connect_to_wss(socks5_proxy, user_id, success_proxies):
         server_hostname = "proxy.wynd.network"
         proxy = Proxy.from_url(socks5_proxy)
         
-        async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
-                                 extra_headers=custom_headers) as websocket:
+        while True:  # Attempt reconnection on failure
+            try:
+                async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
+                                         extra_headers=custom_headers) as websocket:
+                    
+                    async def send_ping():
+                        while True:
+                            send_message = json.dumps(
+                                {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
+                            logger.debug(send_message)
+                            await websocket.send(send_message)
+                            await asyncio.sleep(5)
+                    
+                    asyncio.create_task(send_ping())
+                    
+                    while True:
+                        response = await websocket.recv()
+                        
+                        if not response:
+                            raise Exception("Empty response received")
+                        
+                        message = json.loads(response)
+                        logger.info(message)
+                        
+                        if message.get("action") == "AUTH":
+                            auth_response = {
+                                "id": message["id"],
+                                "origin_action": "AUTH",
+                                "result": {
+                                    "browser_id": device_id,
+                                    "user_id": user_id,
+                                    "user_agent": custom_headers['User-Agent'],
+                                    "timestamp": int(time.time()),
+                                    "device_type": "extension",
+                                    "version": "4.0.3",
+                                    "extension_id": "ilehaonighjijnmpnagapkhpcdbhclfg"
+                                }
+                            }
+                            logger.debug(auth_response)
+                            await websocket.send(json.dumps(auth_response))
+                        
+                        elif message.get("action") == "PONG":
+                            pong_response = {"id": message["id"], "origin_action": "PONG"}
+                            logger.debug(pong_response)
+                            await websocket.send(json.dumps(pong_response))
+                        
+                    # If reached here, connection is successful
+                    success_proxies.append(socks5_proxy)
+                    logger.info(f"Successfully connected to {socks5_proxy}")
+                    break  # Exit reconnect loop on successful connection
             
-            async def send_ping():
-                while True:
-                    send_message = json.dumps(
-                        {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
-                    logger.debug(send_message)
-                    await websocket.send(send_message)
-                    await asyncio.sleep(5)
-            
-            asyncio.create_task(send_ping())
-            
-            while True:
-                response = await websocket.recv()
-                
-                if not response:
-                    raise Exception("Empty response received")
-                
-                message = json.loads(response)
-                logger.info(message)
-                
-                if message.get("action") == "AUTH":
-                    auth_response = {
-                        "id": message["id"],
-                        "origin_action": "AUTH",
-                        "result": {
-                            "browser_id": device_id,
-                            "user_id": user_id,
-                            "user_agent": custom_headers['User-Agent'],
-                            "timestamp": int(time.time()),
-                            "device_type": "extension",
-                            "version": "4.0.3",
-                            "extension_id": "ilehaonighjijnmpnagapkhpcdbhclfg"
-                        }
-                    }
-                    logger.debug(auth_response)
-                    await websocket.send(json.dumps(auth_response))
-                
-                elif message.get("action") == "PONG":
-                    pong_response = {"id": message["id"], "origin_action": "PONG"}
-                    logger.debug(pong_response)
-                    await websocket.send(json.dumps(pong_response))
-            
-            # If reached here, connection is successful
-            success_proxies.append(socks5_proxy)
-            logger.info(f"Successfully connected to {socks5_proxy}")
-    
+            except Exception as e:
+                logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
+                logger.error(socks5_proxy)
+                await asyncio.sleep(10)  # Wait before attempting reconnect
+
     except Exception as e:
-        logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
+        logger.error(f"General error in connection to {socks5_proxy}: {str(e)}")
         logger.error(socks5_proxy)
-        pass  # Do not add failed proxies to success_proxies list
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
@@ -90,22 +95,13 @@ async def main():
         local_proxies = file.read().splitlines()
     
     success_proxies = []
-    for proxy in local_proxies:
-        try:
-            # Perform a simple HTTP request to validate the proxy
-            response = requests.get("https://example.com", proxies={"http": proxy, "https": proxy}, timeout=5)
-            if response.status_code == 200:
-                await connect_to_wss(proxy, _user_id, success_proxies)
-            else:
-                logger.error(f"Failed to validate proxy {proxy}: HTTP status code {response.status_code}")
-                logger.error(f"Skipping proxy {proxy}")
-                continue
-        except Exception as e:
-            logger.error(f"Failed to validate proxy {proxy}: {str(e)}")
-            logger.error(f"Skipping proxy {proxy}")
-            continue
-        
-        await asyncio.sleep(random.randint(5, 10))  # Wait for 5 to 10 seconds before trying the next proxy
+    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
+    await asyncio.gather(*tasks)
+    
+    # Write only successfully connected proxies back to proxy.txt
+    with open('proxy.txt', 'w') as file:
+        for proxy in success_proxies:
+            file.write(proxy + '\n')
 
 if __name__ == '__main__':
     asyncio.run(main())
