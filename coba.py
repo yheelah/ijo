@@ -27,7 +27,7 @@ async def connect_to_wss(socks5_proxy, user_id, success_proxies, retry_tasks):
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         
-        uri = "wss://proxy.wynd.network:4650"
+        url = "wss://proxy.wynd.network:4650"
         server_hostname = "proxy.wynd.network"
         proxy = Proxy.from_url(socks5_proxy)
         
@@ -93,7 +93,7 @@ async def connect_to_socks4(proxy, user_id, success_proxies, retry_tasks):
         # Example implementation (using aiohttp for SOCKS4 support)
         connector = aiohttp_socks.SocksConnector.from_url(f'socks4://{proxy_address}')
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.ws_connect('wss://your.websocket.url') as ws:
+            async with session.ws_connect('wss://proxy.wynd.network:4650') as ws:
                 await ws.send_str('Hello, websocket!')
                 async for msg in ws:
                     print(msg.data)
@@ -110,7 +110,7 @@ async def connect_to_http(proxy, user_id, success_proxies, retry_tasks):
         # Example implementation (using aiohttp for HTTP/HTTPS proxy)
         connector = aiohttp.ProxyConnector.from_url(proxy)
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.ws_connect('wss://your.websocket.url') as ws:
+            async with session.ws_connect('wss://proxy.wynd.network:4650') as ws:
                 await ws.send_str('Hello, websocket!')
                 async for msg in ws:
                     print(msg.data)
