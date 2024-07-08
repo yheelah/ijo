@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import aiohttp_socks
 import random
 import ssl
 import json
@@ -7,7 +8,6 @@ import time
 import uuid
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-
 from loguru import logger
 
 user_agent = UserAgent()
