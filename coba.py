@@ -13,7 +13,7 @@ from loguru import logger
 user_agent = UserAgent()
 random_user_agent = user_agent.random
 
-async def connect_to_wss(socks5_proxy, user_id, success_proxies):
+async def connect_to_wss(socks5_proxy, user_id, success_proxies, retry_tasks):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
     
@@ -82,9 +82,10 @@ async def connect_to_wss(socks5_proxy, user_id, success_proxies):
     except Exception as e:
         logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
         logger.error(socks5_proxy)
+        retry_tasks.append(asyncio.ensure_future(connect_to_wss(socks5_proxy, user_id, success_proxies, retry_tasks)))
         pass  # Do not add failed proxies to success_proxies list
 
-async def connect_to_socks4(proxy, user_id, success_proxies):
+async def connect_to_socks4(proxy, user_id, success_proxies, retry_tasks):
     try:
         # Parse proxy address and port from proxy string
         proxy_address = proxy.replace('socks4://', '').replace('socks5://', '')
@@ -102,8 +103,9 @@ async def connect_to_socks4(proxy, user_id, success_proxies):
     
     except Exception as e:
         logger.error(f"Error in SOCKS4 connection to {proxy}: {str(e)}")
+        retry_tasks.append(asyncio.ensure_future(connect_to_socks4(proxy, user_id, success_proxies, retry_tasks)))
 
-async def connect_to_http(proxy, user_id, success_proxies):
+async def connect_to_http(proxy, user_id, success_proxies, retry_tasks):
     try:
         # Example implementation (using aiohttp for HTTP/HTTPS proxy)
         connector = aiohttp.ProxyConnector.from_url(proxy)
@@ -118,6 +120,12 @@ async def connect_to_http(proxy, user_id, success_proxies):
     
     except Exception as e:
         logger.error(f"Error in HTTP/HTTPS connection to {proxy}: {str(e)}")
+        retry_tasks.append(asyncio.ensure_future(connect_to_http(proxy, user_id, success_proxies, retry_tasks)))
+
+async def retry_failed_tasks(retry_tasks):
+    while retry_tasks:
+        task = retry_tasks.pop(0)  # Get the first task
+        await task
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
@@ -125,19 +133,23 @@ async def main():
         local_proxies = file.read().splitlines()
     
     success_proxies = []
+    retry_tasks = []
     tasks = []
     
     for proxy in local_proxies:
         if proxy.startswith('socks5://'):
-            tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)))
+            tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies, retry_tasks)))
         elif proxy.startswith('socks4://'):
-            tasks.append(asyncio.ensure_future(connect_to_socks4(proxy, _user_id, success_proxies)))
+            tasks.append(asyncio.ensure_future(connect_to_socks4(proxy, _user_id, success_proxies, retry_tasks)))
         elif proxy.startswith('http://') or proxy.startswith('https://'):
-            tasks.append(asyncio.ensure_future(connect_to_http(proxy, _user_id, success_proxies)))
+            tasks.append(asyncio.ensure_future(connect_to_http(proxy, _user_id, success_proxies, retry_tasks)))
         else:
             logger.warning(f"Unknown proxy type for {proxy}. Skipping.")
     
     await asyncio.gather(*tasks)
+    
+    # Retry failed tasks
+    await retry_failed_tasks(retry_tasks)
     
     # Write only successfully connected proxies back to proxy.txt
     with open('proxy.txt', 'w') as file:
