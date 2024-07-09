@@ -85,7 +85,7 @@ async def handle_websocket(websocket, device_id, user_id, custom_headers):
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
-    with open('local_socks5_proxies.txt', 'r') as file:
+    with open('proxy.txt', 'r') as file:
         local_proxies = file.read().splitlines()
     
     tasks = []
