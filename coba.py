@@ -99,14 +99,14 @@ async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxy.txt', 'r') as file:
         local_proxies = file.read().splitlines()
-
+    
     success_proxies = []
-    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
+    tasks = [asyncio.run(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
     await asyncio.gather(*tasks)
-
-    # Write all proxies (connected and not connected) back to proxy.txt
+    
+    # Write only successfully connected proxies back to proxy.txt
     with open('proxy.txt', 'w') as file:
-        for proxy in local_proxies:
+        for proxy in success_proxies:
             file.write(proxy + '\n')
 
 if __name__ == '__main__':
