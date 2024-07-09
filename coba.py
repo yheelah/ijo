@@ -104,9 +104,6 @@ async def main():
         proxi = file.read().splitlines()
 
     tasks = []
-    tasks_connected = []
-    tasks_retry = []  # Clear retry tasks that succeeded
-
     index = 0
     while index < len(proxi):
         if proxi[index].startswith("http://") or proxi[index].startswith("https://"):
@@ -129,40 +126,13 @@ async def main():
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
             index += 1
 
-    while tasks:
-        try:
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            
-            for task in done:
-                try:
-                    result = task.result()
-                    tasks_connected.append(task)
-                except Exception as e:
-                    logger.error(f"Task failed: {str(e)}")
-                    tasks_retry.append(task)
-            
-            tasks = list(pending)
-
-            # Clear retry tasks that succeeded
-            tasks_retry = [task for task in tasks_retry if not task.done()]
-
-            # Delay before retrying failed tasks
-            if tasks_retry:
-                await asyncio.sleep(5)  # Retry every 5 seconds on error
-
-        except KeyboardInterrupt:
-            logger.info("Process interrupted")
-            break
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-
-    # Handle any remaining tasks that didn't succeed
-    for task in tasks:
-        if not task.done():
-            task.cancel()
+    try:
+        await asyncio.gather(*tasks)
+    except KeyboardInterrupt:
+        logger.info("Process interrupted")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
 
 if __name__ == '__main__':
     logger.add("output.log", rotation="500 MB", level="DEBUG")
     asyncio.run(main())
-
-
