@@ -1,24 +1,25 @@
 import asyncio
-import json
-import logging
 import random
 import ssl
+import json
 import time
 import uuid
+from websockets_proxy import Proxy, proxy_connect
+from fake_useragent import UserAgent
 
-from websockets import connect as ws_connect
-from aiohttp_socks import ProxyConnector, ProxyType
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+user_agent = UserAgent()
+random_user_agent = user_agent.random
 
-async def connect_to_wss(proxy_url, proxy_type, user_id, success_proxies):
+async def connect_to_wss(proxy_url, user_id, success_proxies):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, proxy_url))
     logger.info(f"Connecting to {proxy_url} with device ID {device_id}")
     
     try:
         await asyncio.sleep(random.randint(1, 10) / 10)
         custom_headers = {
-            "User-Agent": random_user_agent(),
+            "User-Agent": random_user_agent,
             "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
         }
         ssl_context = ssl.create_default_context()
@@ -27,17 +28,10 @@ async def connect_to_wss(proxy_url, proxy_type, user_id, success_proxies):
         
         uri = "wss://proxy.wynd.network:4650"
         server_hostname = "proxy.wynd.network"
+        proxy = Proxy.from_url(proxy_url)
         
-        if proxy_type == 'SOCKS5':
-            proxy = ProxyConnector.from_url(proxy_url)
-        elif proxy_type == 'HTTP':
-            proxy = ProxyConnector(proxy_type=ProxyType.HTTP, host=proxy_url.split(':')[1][2:], port=int(proxy_url.split(':')[2]))
-        elif proxy_type == 'SOCKS4':
-            proxy = ProxyConnector(proxy_type=ProxyType.SOCKS4, host=proxy_url.split(':')[1][2:], port=int(proxy_url.split(':')[2]))
-        else:
-            raise ValueError(f"Unsupported proxy type: {proxy_type}")
-
-        async with ws_connect(uri, proxy=proxy, ssl=ssl_context, extra_headers=custom_headers) as websocket:
+        async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
+                                 extra_headers=custom_headers) as websocket:
             
             async def send_ping():
                 while True:
