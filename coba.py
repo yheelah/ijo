@@ -7,6 +7,8 @@ import random
 from websockets import connect as websocket_connect
 from fake_useragent import UserAgent
 import aiosocksy
+from aiohttp import ClientSession
+from aiohttp_socks import ProxyConnector
 from loguru import logger
 
 user_agent = UserAgent()
@@ -54,9 +56,12 @@ async def connect_to_wss(proxy_url, user_id, success_proxies):
             if len(proxy_parts) != 2:
                 raise ValueError(f"Invalid HTTP proxy format: {proxy_url}")
 
-            proxy_host, proxy_port = proxy_parts[0], int(proxy_parts[1])
-            async with websocket_connect(uri, ssl=ssl_context, extra_headers=custom_headers, proxy=f"http://{proxy_host}:{proxy_port}") as websocket:
-                await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
+            proxy = f"http://{proxy_parts[0]}:{proxy_parts[1]}"
+            connector = ProxyConnector.from_url(proxy)
+
+            async with ClientSession(connector=connector) as session:
+                async with session.ws_connect(uri, ssl=ssl_context, headers=custom_headers) as websocket:
+                    await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
         else:
             logger.warning(f"Ignoring unsupported proxy type for {proxy_url}")
@@ -125,9 +130,8 @@ async def main():
         local_proxies = file.read().splitlines()
 
     success_proxies = []
-
-    for proxy in local_proxies:
-        await connect_to_wss(proxy, _user_id, success_proxies)
+    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
+    await asyncio.gather(*tasks)
 
     # Write all proxies (connected and not connected) back to proxy.txt
     with open('proxy.txt', 'w') as file:
