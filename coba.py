@@ -106,10 +106,11 @@ async def main():
     tasks_connected = []
     tasks_retry = []
 
+    # First pass: connect to proxies
     for index in range(0, len(proxi), 2):
         if proxi[index].startswith("http://"):
             http_proxy = proxi[index]
-            if index + 1 < len(proxi) and not proxi[index + 1].startswith("http://"):
+            if index + 1 < len(proxi) and proxi[index + 1].startswith("socks5://"):
                 socks5_proxy = proxi[index + 1]
                 tasks_connected.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
             else:
@@ -120,12 +121,13 @@ async def main():
     try:
         await asyncio.gather(*tasks_connected)
 
+        # Second pass: retry failed connections
         for index in range(0, len(proxi), 2):
             if proxi[index].startswith("http://"):
                 http_proxy = proxi[index]
-                if index + 1 < len(proxi) and not proxi[index + 1].startswith("http://"):
+                if index + 1 < len(proxi) and proxi[index + 1].startswith("socks5://"):
                     socks5_proxy = proxi[index + 1]
-                    tasks_retry.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
+                    tasks_retry.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id, retry=True)))
                 else:
                     logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
             else:
@@ -147,5 +149,6 @@ async def main():
         logger.error(f"Unexpected error: {str(e)}")
 
 if __name__ == '__main__':
-    logger.add("output.log", rotation="5000 MB", level="DEBUG")
+    logger.add("output.log", rotation="500 MB", level="DEBUG")
     asyncio.run(main())
+
