@@ -33,12 +33,15 @@ async def connect_to_http_proxy(http_proxy):
                 logger.error(http_proxy)
                 await asyncio.sleep(5)  # Retry every 5 seconds on error
 
-async def connect_to_wss(socks5_proxy, user_id):
+async def connect_to_wss(socks5_proxy, user_id, http_proxy=None):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
     
     while True:
         try:
+            if http_proxy:
+                await connect_to_http_proxy(http_proxy)
+            
             await asyncio.sleep(random.randint(1, 10) / 10)
             custom_headers = {
                 "User-Agent": random_user_agent,
