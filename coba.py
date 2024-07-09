@@ -10,8 +10,6 @@ import aiosocksy
 
 from loguru import logger
 
-
-
 user_agent = UserAgent()
 random_user_agent = user_agent.random
 
@@ -52,7 +50,21 @@ async def connect_to_wss(proxy_url, user_id, success_proxies):
                 await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
         elif proxy_url.startswith('http://'):
-            raise ValueError("HTTP proxy not supported for WebSocket connections")
+            proxy_host = proxy_url.split('://')[1]
+            proxy_parts = proxy_host.split(':')
+            if len(proxy_parts) != 2:
+                raise ValueError(f"Invalid HTTP proxy format: {proxy_url}")
+
+            proxy_headers = {
+                'User-Agent': custom_headers['User-Agent'],
+                'Proxy-Connection': 'keep-alive',
+                'Origin': custom_headers['Origin']
+            }
+            proxy = {'http': f'http://{proxy_parts[0]}:{proxy_parts[1]}'}
+
+            async with proxy_connect(uri, ssl=ssl_context, extra_headers=custom_headers, proxy=proxy,
+                                     proxy_headers=proxy_headers) as websocket:
+                await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
         else:
             logger.warning(f"Ignoring unsupported proxy type for {proxy_url}")
@@ -66,6 +78,7 @@ async def connect_to_wss(proxy_url, user_id, success_proxies):
         logger.error(f"Error in connection to {proxy_url}: {str(e)}")
         logger.error(proxy_url)
         pass  # Do not add failed proxies to success_proxies list
+
 
 async def handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies):
     async def send_ping():
@@ -124,10 +137,11 @@ async def main():
     tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
     await asyncio.gather(*tasks)
 
-    # Write only successfully connected proxies back to proxy.txt
+    # Write all proxies (connected and not connected) back to proxy.txt
     with open('proxy.txt', 'w') as file:
-        for proxy in success_proxies:
+        for proxy in local_proxies:
             file.write(proxy + '\n')
 
 if __name__ == '__main__':
     asyncio.run(main())
+
