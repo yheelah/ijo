@@ -119,6 +119,13 @@ async def main():
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
             index += 1
 
-    await asyncio.gather(*tasks)
+    try:
+        await asyncio.gather(*tasks)
+    except KeyboardInterrupt:
+        logger.info("Process interrupted")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+
 if __name__ == '__main__':
+    logger.add("output.log", rotation="500 MB", level="DEBUG")
     asyncio.run(main())
