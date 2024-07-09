@@ -4,10 +4,9 @@ import ssl
 import time
 import uuid
 import random
-from websockets_proxy import Proxy, proxy_connect
+from websockets import connect as websocket_connect
 from fake_useragent import UserAgent
 import aiosocksy
-
 from loguru import logger
 
 user_agent = UserAgent()
@@ -55,15 +54,8 @@ async def connect_to_wss(proxy_url, user_id, success_proxies):
             if len(proxy_parts) != 2:
                 raise ValueError(f"Invalid HTTP proxy format: {proxy_url}")
 
-            proxy_headers = {
-                'User-Agent': custom_headers['User-Agent'],
-                'Proxy-Connection': 'keep-alive',
-                'Origin': custom_headers['Origin']
-            }
-            proxy = {'http': f'http://{proxy_parts[0]}:{proxy_parts[1]}'}
-
-            async with proxy_connect(uri, ssl=ssl_context, extra_headers=custom_headers, proxy=proxy,
-                                     proxy_headers=proxy_headers) as websocket:
+            proxy_host, proxy_port = proxy_parts[0], int(proxy_parts[1])
+            async with websocket_connect(uri, ssl=ssl_context, extra_headers=custom_headers, proxy=f"http://{proxy_host}:{proxy_port}") as websocket:
                 await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
         else:
@@ -127,15 +119,15 @@ async def handle_websocket(websocket, device_id, user_id, custom_headers, succes
     logger.info(f"Successfully connected to {proxy_url}")
 
 
-
 async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxy.txt', 'r') as file:
         local_proxies = file.read().splitlines()
 
     success_proxies = []
-    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
-    await asyncio.gather(*tasks)
+
+    for proxy in local_proxies:
+        await connect_to_wss(proxy, _user_id, success_proxies)
 
     # Write all proxies (connected and not connected) back to proxy.txt
     with open('proxy.txt', 'w') as file:
@@ -144,4 +136,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
