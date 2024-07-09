@@ -6,10 +6,10 @@ import uuid
 import random
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-from aiohttp import ClientSession, TCPConnector
 import aiosocksy
 
 from loguru import logger
+
 
 
 user_agent = UserAgent()
@@ -19,63 +19,53 @@ async def connect_to_wss(proxy_url, user_id, success_proxies):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, proxy_url))
     logger.info(f"Connecting to {proxy_url} with device ID {device_id}")
 
-    retry_limit = 3  # Number of times to retry
-    retry_count = 0
+    try:
+        await asyncio.sleep(random.randint(1, 10) / 10)
+        custom_headers = {
+            "User-Agent": UserAgent().random,
+            "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
+        }
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
 
-    while retry_count < retry_limit:
-        try:
-            await asyncio.sleep(random.randint(1, 10) / 10)
-            custom_headers = {
-                "User-Agent": UserAgent().random,
-                "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
-            }
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
+        uri = "wss://proxy.wynd.network:4650"
+        server_hostname = "proxy.wynd.network"
 
-            uri = "wss://proxy.wynd.network:4650"
-            server_hostname = "proxy.wynd.network"
+        if proxy_url.startswith('socks5://'):
+            proxy = Proxy.from_url(proxy_url)
+            async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
+                                     extra_headers=custom_headers) as websocket:
+                await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
-            if proxy_url.startswith('socks5://'):
-                proxy = Proxy.from_url(proxy_url)
-                async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
-                                         extra_headers=custom_headers) as websocket:
-                    await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
+        elif proxy_url.startswith('socks4://'):
+            proxy_host = proxy_url.split('://')[1]
+            proxy_parts = proxy_host.split(':')
+            if len(proxy_parts) != 2:
+                raise ValueError(f"Invalid SOCKS4 proxy format: {proxy_url}")
 
-            elif proxy_url.startswith('socks4://'):
-                proxy_host = proxy_url.split('://')[1]
-                proxy_parts = proxy_host.split(':')
-                if len(proxy_parts) != 2:
-                    raise ValueError(f"Invalid SOCKS4 proxy format: {proxy_url}")
+            conn = aiosocksy.open_connection(proxy_host=proxy_parts[0], proxy_port=int(proxy_parts[1]),
+                                             remote_host=server_hostname, remote_port=4650,
+                                             proxy_auth=None, proxy_type=aiosocksy.ProxyType.SOCKS4)
 
-                conn = aiosocksy.open_connection(proxy_host=proxy_parts[0], proxy_port=int(proxy_parts[1]),
-                                                 remote_host=server_hostname, remote_port=4650,
-                                                 proxy_auth=None, proxy_type=aiosocksy.ProxyType.SOCKS4)
+            async with conn as websocket:
+                await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
 
-                async with conn as websocket:
-                    await handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies)
+        elif proxy_url.startswith('http://'):
+            raise ValueError("HTTP proxy not supported for WebSocket connections")
 
-            elif proxy_url.startswith('http://'):
-                raise ValueError("HTTP proxy not supported for WebSocket connections")
+        else:
+            logger.warning(f"Ignoring unsupported proxy type for {proxy_url}")
+            return
 
-            else:
-                logger.warning(f"Ignoring unsupported proxy type for {proxy_url}")
-                return
+        # If we reach here, connection is successful
+        success_proxies.append(proxy_url)
+        logger.info(f"Successfully connected to {proxy_url}")
 
-            # If we reach here, connection is successful
-            success_proxies.append(proxy_url)
-            logger.info(f"Successfully connected to {proxy_url}")
-            return  # Exit the retry loop on successful connection
-
-        except Exception as e:
-            logger.error(f"Error in connection to {proxy_url}: {str(e)}")
-            logger.error(proxy_url)
-            retry_count += 1
-            logger.info(f"Retry attempt {retry_count}/{retry_limit}")
-            await asyncio.sleep(5)  # Wait before retrying
-
-    logger.error(f"Failed to connect to {proxy_url} after {retry_limit} attempts")
-
+    except Exception as e:
+        logger.error(f"Error in connection to {proxy_url}: {str(e)}")
+        logger.error(proxy_url)
+        pass  # Do not add failed proxies to success_proxies list
 
 async def handle_websocket(websocket, device_id, user_id, custom_headers, success_proxies):
     async def send_ping():
@@ -123,16 +113,6 @@ async def handle_websocket(websocket, device_id, user_id, custom_headers, succes
     success_proxies.append(proxy_url)
     logger.info(f"Successfully connected to {proxy_url}")
 
-async def retry_connection(proxy_url, user_id, success_proxies):
-    while True:
-        try:
-            await connect_to_wss(proxy_url, user_id, success_proxies)
-            return  # If connected successfully, exit retry loop
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"Retry failed for {proxy_url}: {str(e)}")
-            await asyncio.sleep(30)  # Wait before retrying
 
 
 async def main():
@@ -141,12 +121,7 @@ async def main():
         local_proxies = file.read().splitlines()
 
     success_proxies = []
-    tasks = []
-
-    for proxy in local_proxies:
-        tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)))
-        tasks.append(asyncio.ensure_future(retry_connection(proxy, _user_id, success_proxies)))
-
+    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id, success_proxies)) for proxy in local_proxies]
     await asyncio.gather(*tasks)
 
     # Write only successfully connected proxies back to proxy.txt
