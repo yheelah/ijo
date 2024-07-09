@@ -103,36 +103,49 @@ async def main():
     with open('proxi.txt', 'r') as file:
         proxi = file.read().splitlines()
 
-    tasks = []
-    index = 0
-    while index < len(proxi):
-        if proxi[index].startswith("http://") or proxi[index].startswith("https://"):
-            # It's an HTTP proxy
+    tasks_connected = []
+    tasks_retry = []
+
+    for index in range(0, len(proxi), 2):
+        if proxi[index].startswith("http://"):
             http_proxy = proxi[index]
-            # Look for the next line for SOCKS5 proxy
-            index += 1
-            if index < len(proxi) and proxi[index].startswith("socks5://"):
-                socks5_proxy = proxi[index]
-                tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
-                index += 1
+            if index + 1 < len(proxi) and not proxi[index + 1].startswith("http://"):
+                socks5_proxy = proxi[index + 1]
+                tasks_connected.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
             else:
                 logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
-        elif proxi[index].startswith("socks5://"):
-            # It's a SOCKS5 proxy
-            socks5_proxy = proxi[index]
-            tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss('', socks5_proxy, _user_id)))
-            index += 1
         else:
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
-            index += 1
 
     try:
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks_connected)
+
+        for index in range(0, len(proxi), 2):
+            if proxi[index].startswith("http://"):
+                http_proxy = proxi[index]
+                if index + 1 < len(proxi) and not proxi[index + 1].startswith("http://"):
+                    socks5_proxy = proxi[index + 1]
+                    tasks_retry.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
+                else:
+                    logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
+            else:
+                logger.warning(f"Unsupported proxy type: {proxi[index]}")
+
+        while tasks_retry:
+            await asyncio.gather(*tasks_retry)
+
+            # Clear retry tasks that succeeded
+            tasks_retry = [task for task in tasks_retry if not task.done()]
+
+            # Delay before retrying failed tasks
+            if tasks_retry:
+                await asyncio.sleep(5)  # Retry every 5 seconds on error
+
     except KeyboardInterrupt:
         logger.info("Process interrupted")
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
 
 if __name__ == '__main__':
-    logger.add("output.log", rotation="500 MB", level="DEBUG")
+    logger.add("output.log", rotation="5000 MB", level="DEBUG")
     asyncio.run(main())
