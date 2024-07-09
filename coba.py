@@ -117,6 +117,11 @@ async def main():
                 index += 1
             else:
                 logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
+        elif proxi[index].startswith("socks5://"):
+            # It's a SOCKS5 proxy
+            socks5_proxy = proxi[index]
+            tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss('', socks5_proxy, _user_id)))
+            index += 1
         else:
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
             index += 1
