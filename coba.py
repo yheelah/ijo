@@ -21,8 +21,7 @@ async def connect_to_proxy_and_wss(http_proxy, socks5_proxy, user_id):
         while True:
             try:
                 headers = {
-                    "User-Agent": random_user_agent,
-                    "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
+                    "User-Agent": random_user_agent
                 }
 
                 # Example request using the HTTP proxy
