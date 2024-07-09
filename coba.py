@@ -96,45 +96,52 @@ async def connect_to_proxy_and_wss(http_proxy, socks5_proxy, user_id):
                 logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
                 logger.error(socks5_proxy)
                 await asyncio.sleep(5)  # Retry every 5 seconds on error
-
+                
 async def main():
     _user_id = input('Please Enter your user ID: ')
 
     with open('proxi.txt', 'r') as file:
         proxi = file.read().splitlines()
 
+    tasks = []
     tasks_connected = []
-    tasks_retry = []
+    tasks_retry = []  # Clear retry tasks that succeeded
 
-    # First pass: connect to proxies
-    for index in range(0, len(proxi), 2):
-        if proxi[index].startswith("http://"):
+    index = 0
+    while index < len(proxi):
+        if proxi[index].startswith("http://") or proxi[index].startswith("https://"):
+            # It's an HTTP proxy
             http_proxy = proxi[index]
-            if index + 1 < len(proxi) and proxi[index + 1].startswith("socks5://"):
-                socks5_proxy = proxi[index + 1]
-                tasks_connected.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
+            # Look for the next line for SOCKS5 proxy
+            index += 1
+            if index < len(proxi) and proxi[index].startswith("socks5://"):
+                socks5_proxy = proxi[index]
+                tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
+                index += 1
             else:
                 logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
+        elif proxi[index].startswith("socks5://"):
+            # It's a SOCKS5 proxy
+            socks5_proxy = proxi[index]
+            tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss('', socks5_proxy, _user_id)))
+            index += 1
         else:
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
+            index += 1
 
-    try:
-        await asyncio.gather(*tasks_connected)
-
-        # Second pass: retry failed connections
-        for index in range(0, len(proxi), 2):
-            if proxi[index].startswith("http://"):
-                http_proxy = proxi[index]
-                if index + 1 < len(proxi) and proxi[index + 1].startswith("socks5://"):
-                    socks5_proxy = proxi[index + 1]
-                    tasks_retry.append(asyncio.create_task(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id, retry=True)))
-                else:
-                    logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
-            else:
-                logger.warning(f"Unsupported proxy type: {proxi[index]}")
-
-        while tasks_retry:
-            await asyncio.gather(*tasks_retry)
+    while tasks:
+        try:
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            
+            for task in done:
+                try:
+                    result = task.result()
+                    tasks_connected.append(task)
+                except Exception as e:
+                    logger.error(f"Task failed: {str(e)}")
+                    tasks_retry.append(task)
+            
+            tasks = list(pending)
 
             # Clear retry tasks that succeeded
             tasks_retry = [task for task in tasks_retry if not task.done()]
@@ -143,12 +150,19 @@ async def main():
             if tasks_retry:
                 await asyncio.sleep(5)  # Retry every 5 seconds on error
 
-    except KeyboardInterrupt:
-        logger.info("Process interrupted")
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        except KeyboardInterrupt:
+            logger.info("Process interrupted")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+
+    # Handle any remaining tasks that didn't succeed
+    for task in tasks:
+        if not task.done():
+            task.cancel()
 
 if __name__ == '__main__':
     logger.add("output.log", rotation="500 MB", level="DEBUG")
     asyncio.run(main())
+
 
