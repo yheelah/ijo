@@ -24,7 +24,7 @@ async def connect_to_wss(proxy_url, proxy_type, user_id):
     }
     
     if proxy_type == 'http':
-        connector = aiohttp.TCPConnector(ssl=ssl_context, proxy=f"http://{proxy_url}")
+        connector = aiohttp.ProxyConnector.from_url(f"http://{proxy_url}")
         async with aiohttp.ClientSession(connector=connector) as session:
             async with session.ws_connect("wss://proxy.wynd.network:4650", headers=custom_headers) as websocket:
                 await handle_websocket(websocket, device_id, user_id, custom_headers)
