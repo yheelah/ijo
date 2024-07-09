@@ -106,15 +106,35 @@ async def main():
     tasks = []
     index = 0
     while index < len(proxi):
-        if proxi[index].startswith("http://"):
+        if proxi[index].startswith("http://") or proxi[index].startswith("https://"):
+            # It's an HTTP proxy
             http_proxy = proxi[index]
-            if index + 1 < len(proxi) and not proxi[index + 1].startswith("http://"):
-                socks5_proxy = proxi[index + 1]
-                tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
-                index += 2  # Move to the next pair
+            # Look for the next line for SOCKS5 or SOCKS4 proxy
+            index += 1
+            if index < len(proxi):
+                if proxi[index].startswith("socks5://"):
+                    socks5_proxy = proxi[index]
+                    tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(http_proxy, socks5_proxy, _user_id)))
+                    index += 1
+                elif proxi[index].startswith("socks4://"):
+                    socks4_proxy = proxi[index]
+                    tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(http_proxy, socks4_proxy, _user_id)))
+                    index += 1
+                else:
+                    logger.warning(f"Invalid SOCKS proxy format for HTTP proxy {http_proxy}: {proxi[index]}")
+                    index += 1
             else:
-                logger.warning(f"Missing or invalid SOCKS5 proxy for HTTP proxy {http_proxy}")
-                index += 1
+                logger.warning(f"Missing SOCKS proxy for HTTP proxy {http_proxy}")
+        elif proxi[index].startswith("socks5://"):
+            # It's a SOCKS5 proxy
+            socks5_proxy = proxi[index]
+            tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss('', socks5_proxy, _user_id)))
+            index += 1
+        elif proxi[index].startswith("socks4://"):
+            # It's a SOCKS4 proxy
+            socks4_proxy = proxi[index]
+            tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss('', socks4_proxy, _user_id)))
+            index += 1
         else:
             logger.warning(f"Unsupported proxy type: {proxi[index]}")
             index += 1
