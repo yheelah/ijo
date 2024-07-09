@@ -17,21 +17,18 @@ async def connect_to_proxy_and_wss(http_proxy, socks5_proxy, user_id):
     logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
 
     async with aiohttp.ClientSession() as session:
-        while True:
-            try:
-                headers = {
-                    "User-Agent": random_user_agent,
-                    "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
-                }
+        try:
+            headers = {
+                "User-Agent": random_user_agent,
+                "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
+            }
 
-                # Example request using the HTTP proxy
-                async with session.get("https://jsonplaceholder.typicode.com/posts/1", proxy=http_proxy, headers=headers) as response:
-                    html = await response.text()
-                    logger.info(f"Received response from HTTP proxy {http_proxy}: {html}")
+            # Example request using the HTTP proxy
+            async with session.get("https://jsonplaceholder.typicode.com/posts/1", proxy=http_proxy, headers=headers) as response:
+                html = await response.text()
+                logger.info(f"Received response from HTTP proxy {http_proxy}: {html}")
 
-                await asyncio.sleep(random.randint(1, 10))  # Adjust sleep time as needed
-
-                await asyncio.sleep(random.randint(1, 10) / 10)
+                # Now proceed to WebSocket connection
                 custom_headers = {
                     "User-Agent": random_user_agent,
                     "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
@@ -88,27 +85,30 @@ async def connect_to_proxy_and_wss(http_proxy, socks5_proxy, user_id):
                             logger.debug(pong_response)
                             await websocket.send(json.dumps(pong_response))
 
-            except Exception as e:
-                logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
-                logger.error(socks5_proxy)
-                await asyncio.sleep(5)  # Retry every 5 seconds on error
+        except Exception as e:
+            logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
+            logger.error(socks5_proxy)
+            await asyncio.sleep(5)  # Retry every 5 seconds on error
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxi.txt', 'r') as file:
-            proxi = file.read().splitlines()
+        proxi = file.read().splitlines()
 
     tasks = []
-    for proxy in proxi:
-        if proxy.startswith("http://"):
+    i = 0
+    while i < len(proxi):
+        if proxi[i].startswith("http://"):
             # Extract SOCKS5 proxy from the list (assuming it's the next line)
-            if proxi.index(proxy) + 1 < len(proxi):
-                socks5_proxy = proxi[proxi.index(proxy) + 1]
-                tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(proxy, socks5_proxy, _user_id)))
+            if i + 1 < len(proxi):
+                socks5_proxy = proxi[i + 1]
+                tasks.append(asyncio.ensure_future(connect_to_proxy_and_wss(proxi[i], socks5_proxy, _user_id)))
+                i += 1  # Move to next pair of proxies
             else:
-                logger.warning(f"Missing SOCKS5 proxy for HTTP proxy {proxy}")
+                logger.warning(f"Missing SOCKS5 proxy for HTTP proxy {proxi[i]}")
         else:
-            logger.warning(f"Unsupported proxy type: {proxy}")
+            logger.warning(f"Unsupported proxy type: {proxi[i]}")
+        i += 1
 
     await asyncio.gather(*tasks)
 
