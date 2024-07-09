@@ -22,7 +22,7 @@ async def connect_to_http_proxy(http_proxy):
                 }
 
                 # Example request using the HTTP proxy
-                async with session.get("(proxy)", proxy=http_proxy, headers=headers) as response:
+                async with session.get("https://jsonplaceholder.typicode.com/posts/1", proxy=http_proxy, headers=headers) as response:
                     html = await response.text()
                     logger.info(f"Received response from {http_proxy}: {html}")
                 
@@ -103,11 +103,11 @@ async def connect_to_wss(socks5_proxy, user_id):
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
-    with open('proxy.txt', 'r') as file:
-            proxy = file.read().splitlines()
+    with open('proxi.txt', 'r') as file:
+            proxi = file.read().splitlines()
     
     tasks = []
-    for proxy in proxy:
+    for proxy in proxi:
         if proxy.startswith("http://"):
             tasks.append(asyncio.ensure_future(connect_to_http_proxy(proxy)))
         elif proxy.startswith("socks5://"):
