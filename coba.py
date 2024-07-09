@@ -78,7 +78,7 @@ async def connect_to_wss(socks5_proxy, user_id):
         except Exception as e:
             logger.error(f"Error in SOCKS5 connection to {socks5_proxy}: {str(e)}")
             logger.error(socks5_proxy)
-            continue
+            await asyncio.sleep(10)  # Menunggu sebelum mencoba koneksi kembali
 
 async def connect_to_http_proxy(http_proxy, user_id):
     logger.info(f"Connecting to HTTP proxy {http_proxy}")
@@ -119,6 +119,7 @@ async def main():
         elif proxy.startswith('socks5'):
             tasks.append(asyncio.ensure_future(connect_to_wss(proxy, _user_id)))
     
+    # Menunggu hingga semua koneksi selesai
     await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
