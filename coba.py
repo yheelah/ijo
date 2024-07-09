@@ -121,3 +121,5 @@ async def main():
             index += 1
 
     await asyncio.gather(*tasks)
+if __name__ == '__main__':
+    asyncio.run(main())
