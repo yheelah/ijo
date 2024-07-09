@@ -17,8 +17,12 @@ async def connect_to_http_proxy(http_proxy):
     async with aiohttp.ClientSession() as session:
         while True:
             try:
+                headers = {
+                    "User-Agent": random_user_agent
+                }
+
                 # Example request using the HTTP proxy
-                async with session.get("http://example.com", proxy=http_proxy) as response:
+                async with session.get("(proxy)", proxy=http_proxy, headers=headers) as response:
                     html = await response.text()
                     logger.info(f"Received response from {http_proxy}: {html}")
                 
@@ -96,14 +100,14 @@ async def connect_to_wss(socks5_proxy, user_id):
             logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
             logger.error(socks5_proxy)
             await asyncio.sleep(5)  # Retry every 5 seconds on error
-    
+
 async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxy.txt', 'r') as file:
-            local_proxies = file.read().splitlines()
+            proxy = file.read().splitlines()
     
     tasks = []
-    for proxy in local_proxies:
+    for proxy in proxy:
         if proxy.startswith("http://"):
             tasks.append(asyncio.ensure_future(connect_to_http_proxy(proxy)))
         elif proxy.startswith("socks5://"):
