@@ -88,7 +88,7 @@ async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxi.txt', 'r') as file:
             proxi = file.read().splitlines()
-    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in proxi ]
+    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in proxi]
     await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
