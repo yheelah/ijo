@@ -4,10 +4,9 @@ import ssl
 import json
 import time
 import uuid
-from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-from loguru import logger
 
 user_agent = UserAgent()
 random_user_agent = user_agent.random
@@ -44,9 +43,9 @@ async def connect_to_wss(socks5_proxy, user_id):
                 
                 ping_task = asyncio.create_task(send_ping())
                 
-                try:
-                    while True:
-                        response = await websocket.recv()
+                while True:
+                    try:
+                        response = await asyncio.wait_for(websocket.recv(), timeout=15)
                         
                         if not response:
                             raise Exception("Empty response received")
@@ -75,23 +74,21 @@ async def connect_to_wss(socks5_proxy, user_id):
                             pong_response = {"id": message["id"], "origin_action": "PONG"}
                             logger.debug(pong_response)
                             await websocket.send(json.dumps(pong_response))
-                
-                except (ConnectionClosedError, ConnectionClosedOK) as e:
-                    logger.warning(f"Connection closed: {e}")
-                
-                finally:
-                    ping_task.cancel()
-                    await ping_task
-                
+                    
+                    except asyncio.TimeoutError:
+                        logger.error(f"Timeout error on {socks5_proxy}. Retrying connection.")
+                        break
+        
         except Exception as e:
             logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
+            logger.error(socks5_proxy)
             continue
 
 async def main():
     _user_id = input('Please Enter your user ID: ')
     with open('proxi.txt', 'r') as file:
-        proxi = file.read().splitlines()
-    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in proxi]
+            proxi = file.read().splitlines()
+    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in proxi ]
     await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
