@@ -78,7 +78,7 @@ async def main():
     #find user_id on the site in conlose localStorage.getItem('userId') (if you can't get it, write allow pasting)
     _user_id = input('Please Enter your user ID: ')
     #put the proxy in a file in the format socks5://username:password@ip:port or socks5://ip:port
-    r = requests.get("https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/socks4.txt", stream=True)
+    r = requests.get("https://raw.githubusercontent.com/yheelah/ijo/main/socks4.txt", stream=True)
     if r.status_code == 200:
         with open('socks4.txt', 'wb') as f:
             for chunk in r:
@@ -86,7 +86,7 @@ async def main():
         with open('socks4.txt', 'r') as file:
                 socks5_proxy_list = file.read().splitlines()
     
-    tasks = [asyncio.ensure_future(connect_to_wss('socks4://'+i, _user_id)) for i in socks5_proxy_list]
+    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in socks5_proxy_list]
     await asyncio.gather(*tasks)
 
 
